@@ -1,45 +1,36 @@
-name: Release
+name: Check Prometheus Alert rules
 
 on:
-  push:
-    # Sequence of patterns matched against refs/tags
-    tags:
-    - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+  pull_request:
+    paths:
+    - 'prometheus/config/*.yml'
+    - 'prometheus/alert_rules/*.yml'
 
 jobs:
-  build:
-    name: Upload Release Asset
+  on-pull-request:
+    name: On Pull Request
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - uses: actions/setup-go@v2
-        with:
-          go-version: '1.16'
+    - name: Checkout Repo
+      uses: actions/checkout@master
 
-      - name: Get the version
-        id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+    - name: Check Prometheus alert rules
+      uses: peimanja/promtool-github-actions@master
+      with:
+        promtool_actions_subcommand: 'rules'
+        promtool_actions_files: 'prometheus/alert_rules/*.yml'
+        promtool_actions_version: '2.14.0'
+        promtool_actions_comment: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build
-        run: CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-X 'main.version=${{ steps.get_version.outputs.VERSION }}'" -o github-actions-exporter
+    - name: Check Prometheus configs
+      uses: peimanja/promtool-github-actions@master
+      with:
+        promtool_actions_subcommand: 'config'
+        promtool_actions_files: 'prometheus/config/*.yml'
+        promtool_actions_version: '2.14.0'
+        promtool_actions_comment: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset 
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
-          asset_path: github-actions-exporter
-          asset_name: github-actions-exporter
-          asset_content_type: application/binary
